@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discussion Forum — PeerSphere</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="page-layout">
+    <div id="sidebar-container"></div>
+    <main class="main-content">
+
+        <div class="top-bar">
+            <div class="page-title">
+                <h1>Discussion Forum</h1>
+                <p>Ask questions, share knowledge</p>
+            </div>
+            <div class="top-bar-actions">
+                <div class="search-bar">
+                    <span>🔍</span>
+                    <input type="text" placeholder="Search questions..."
+                           oninput="handleSearch(this.value)">
+                </div>
+                <button class="btn btn-primary" onclick="openModal('ask-modal')">
+                    + Ask Question
+                </button>
+            </div>
+        </div>
+
+        <!-- Filter Tabs -->
+        <div style="display:flex;gap:8px;margin-bottom:24px;">
+            <button class="btn btn-primary btn-sm" id="tab-all"
+                    onclick="switchTab('all')">All Questions</button>
+            <button class="btn btn-outline btn-sm" id="tab-unanswered"
+                    onclick="switchTab('unanswered')">Unanswered</button>
+            <button class="btn btn-outline btn-sm" id="tab-mine"
+                    onclick="switchTab('mine')">My Questions</button>
+        </div>
+
+        <div id="alert-container"></div>
+
+        <!-- Questions List -->
+        <div id="questions-container">
+            <div class="loading-overlay"><div class="spinner"></div></div>
+        </div>
+
+        <!-- Question Detail (shown when question is clicked) -->
+        <div id="question-detail" style="display:none;"></div>
+
+    </main>
+</div>
+
+<!-- Ask Question Modal -->
+<div class="modal-overlay" id="ask-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Ask a Question</h3>
+            <button class="modal-close" onclick="closeModal('ask-modal')">✕</button>
+        </div>
+        <div id="modal-alert"></div>
+        <div class="form-group">
+            <label class="form-label">Question Title *</label>
+            <input type="text" id="q-title" class="form-control"
+                   placeholder="How does Spring Security JWT work?">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Details *</label>
+            <textarea id="q-body" class="form-control" rows="4"
+                      placeholder="Explain your question in detail..."></textarea>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Tags</label>
+                <input type="text" id="q-tags" class="form-control"
+                       placeholder="java,spring,jwt">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Group (optional)</label>
+                <select id="q-group" class="form-control">
+                    <option value="">Platform-wide</option>
+                </select>
+            </div>
+        </div>
+        <div style="display:flex;gap:12px;justify-content:flex-end;">
+            <button class="btn btn-outline" onclick="closeModal('ask-modal')">Cancel</button>
+            <button class="btn btn-primary" onclick="askQuestion()">Post Question</button>
+        </div>
+    </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/utils.js"></script>
+<script>
+    requireAuth();
+    renderSidebar('forum');
+
+    let currentTab = 'all';
+    let openQuestionId = null;
+
+    async function init() {
+        try {
+            const groups = await GroupAPI.getMyGroups();
+            const select = document.getElementById('q-group');
+            if (groups?.length) {
+                select.innerHTML = `<option value="">Platform-wide</option>` +
+                    groups.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+            }
+        } catch(e) { /* silent */ }
+        loadQuestions('all');
+    }
+
+    function switchTab(tab) {
+        currentTab = tab;
+        ['all','unanswered','mine'].forEach(t => {
+            document.getElementById(`tab-${t}`).className =
+                `btn btn-sm ${t === tab ? 'btn-primary' : 'btn-outline'}`;
+        });
+        document.getElementById('question-detail').style.display = 'none';
+        document.getElementById('questions-container').style.display = 'block';
+        loadQuestions(tab);
+    }
+
+    async function loadQuestions(tab) {
+        showLoading('questions-container');
+        try {
+            let questions;
+            if (tab === 'all')        questions = await ForumAPI.getAllQuestions();
+            else if (tab === 'unanswered') questions = await ForumAPI.getUnanswered();
+            else                      questions = await ForumAPI.getMyQuestions();
+            renderQuestions(questions || []);
+        } catch(e) {
+            showAlert('alert-container', 'Failed to load questions');
+        }
+    }
+
+    async function handleSearch(keyword) {
+        if (!keyword.trim()) { loadQuestions(currentTab); return; }
+        try {
+            const results = await ForumAPI.searchQuestions(keyword);
+            renderQuestions(results);
+        } catch(e) { /* silent */ }
+    }
+
+    function renderQuestions(questions) {
+        const el = document.getElementById('questions-container');
+        if (!questions.length) {
+            el.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">💬</div>
+                    <h3>No questions yet</h3>
+                    <p>Be the first to ask!</p>
+                </div>`;
+            return;
+        }
+
+        el.innerHTML = questions.map(q => `
+            <div class="question-card" onclick="openQuestion(${q.id})"
+                 style="cursor:pointer;">
+                <div style="display:flex;align-items:flex-start;gap:16px;">
+                    <div style="text-align:center;min-width:48px;">
+                        <div style="font-size:1.2rem;font-weight:700;">${q.upvoteCount}</div>
+                        <div style="font-size:0.65rem;color:var(--text-secondary);">votes</div>
+                    </div>
+                    <div style="flex:1;">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                            <h4 style="font-size:1rem;">${q.title}</h4>
+                            ${q.isSolved
+                                ? '<span class="badge badge-success">✓ Solved</span>'
+                                : ''}
+                        </div>
+                        <p style="font-size:0.8rem;color:var(--text-secondary);
+                                   margin-bottom:10px;">
+                            ${q.body.substring(0, 120)}${q.body.length > 120 ? '...' : ''}
+                        </p>
+                        <div>${renderTags(q.tags)}</div>
+                    </div>
+                    <div style="text-align:right;min-width:80px;">
+                        <div style="font-size:1.1rem;font-weight:600;">${q.answerCount}</div>
+                        <div style="font-size:0.65rem;color:var(--text-secondary);">answers</div>
+                    </div>
+                </div>
+                <div class="question-meta">
+                    <span>👤 ${q.askedByName}</span>
+                    <span>🕐 ${timeAgo(q.createdAt)}</span>
+                    ${q.groupName ? `<span>👥 ${q.groupName}</span>` : ''}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async function openQuestion(id) {
+        openQuestionId = id;
+        document.getElementById('questions-container').style.display = 'none';
+        const el = document.getElementById('question-detail');
+        el.style.display = 'block';
+        el.innerHTML = `<div class="loading-overlay"><div class="spinner"></div></div>`;
+
+        try {
+            const q = await ForumAPI.getQuestion(id);
+            el.innerHTML = `
+                <!-- Back button -->
+                <button class="btn btn-outline btn-sm" style="margin-bottom:20px;"
+                        onclick="backToList()">← Back to Questions</button>
+
+                <!-- Question -->
+                <div class="card" style="margin-bottom:20px;">
+                    <div style="display:flex;justify-content:space-between;
+                                align-items:flex-start;margin-bottom:16px;">
+                        <div>
+                            <h2 style="margin-bottom:8px;">${q.title}</h2>
+                            <div style="display:flex;gap:8px;align-items:center;">
+                                ${q.isSolved
+                                    ? '<span class="badge badge-success">✓ Solved</span>'
+                                    : ''}
+                                <span style="font-size:0.8rem;color:var(--text-secondary);">
+                                    Asked by ${q.askedByName} · ${timeAgo(q.createdAt)}
+                                </span>
+                            </div>
+                        </div>
+                        <button class="vote-btn ${q.upvotedByCurrentUser ? 'active' : ''}"
+                                onclick="upvoteQuestion(${q.id})">
+                            ▲ ${q.upvoteCount}
+                        </button>
+                    </div>
+                    <p style="white-space:pre-wrap;margin-bottom:16px;">${q.body}</p>
+                    <div>${renderTags(q.tags)}</div>
+                </div>
+
+                <!-- Answers -->
+                <div style="margin-bottom:20px;">
+                    <h3 style="margin-bottom:16px;">
+                        ${q.answerCount} Answer${q.answerCount !== 1 ? 's' : ''}
+                    </h3>
+                    ${q.answers.map(a => `
+                        <div class="card" style="margin-bottom:12px;border-left:3px solid ${
+                            a.isAccepted ? 'var(--success)' : 'var(--border)'};">
+                            <div style="display:flex;justify-content:space-between;
+                                        align-items:flex-start;margin-bottom:12px;">
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    ${a.isAccepted
+                                        ? '<span class="badge badge-success">✓ Accepted</span>'
+                                        : ''}
+                                    <span style="font-size:0.8rem;color:var(--text-secondary);">
+                                        ${a.answeredByName} · ${timeAgo(a.createdAt)}
+                                    </span>
+                                </div>
+                                <div style="display:flex;gap:6px;align-items:center;">
+                                    <button class="vote-btn ${
+                                        a.upvotedByCurrentUser ? 'active' : ''}"
+                                            onclick="upvoteAnswer(${a.id})">
+                                        ▲ ${a.upvoteCount}
+                                    </button>
+                                    ${!q.isSolved
+                                        ? `<button class="btn btn-success btn-sm"
+                                                   onclick="acceptAnswer(${q.id},${a.id})">
+                                               ✓ Accept
+                                           </button>`
+                                        : ''}
+                                </div>
+                            </div>
+                            <p style="white-space:pre-wrap;">${a.body}</p>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <!-- Post Answer -->
+                <div class="card">
+                    <h3 style="margin-bottom:16px;">Your Answer</h3>
+                    <div class="form-group">
+                        <textarea id="answer-body" class="form-control" rows="4"
+                                  placeholder="Write a detailed answer..."></textarea>
+                    </div>
+                    <button class="btn btn-primary" onclick="postAnswer(${q.id})">
+                        Post Answer
+                    </button>
+                </div>`;
+        } catch(e) {
+            el.innerHTML = `<div class="alert alert-error">Failed to load question</div>`;
+        }
+    }
+
+    function backToList() {
+        document.getElementById('question-detail').style.display = 'none';
+        document.getElementById('questions-container').style.display = 'block';
+    }
+
+    async function askQuestion() {
+        const title   = document.getElementById('q-title').value.trim();
+        const body    = document.getElementById('q-body').value.trim();
+        const tags    = document.getElementById('q-tags').value.trim();
+        const groupId = document.getElementById('q-group').value;
+
+        if (!title || !body) {
+            showAlert('modal-alert', 'Title and details are required');
+            return;
+        }
+
+        try {
+            await ForumAPI.askQuestion({
+                title, body, tags,
+                groupId: groupId ? parseInt(groupId) : null
+            });
+            closeModal('ask-modal');
+            showAlert('alert-container', 'Question posted!', 'success');
+            loadQuestions(currentTab);
+        } catch(e) {
+            showAlert('modal-alert', e.message);
+        }
+    }
+
+    async function postAnswer(questionId) {
+        const body = document.getElementById('answer-body').value.trim();
+        if (!body) { alert('Please write an answer'); return; }
+        try {
+            await ForumAPI.postAnswer(questionId, { body });
+            openQuestion(questionId); // refresh
+        } catch(e) {
+            showAlert('alert-container', e.message);
+        }
+    }
+
+    async function upvoteQuestion(id) {
+        try { await ForumAPI.upvoteQuestion(id); openQuestion(id); }
+        catch(e) { /* silent */ }
+    }
+
+    async function upvoteAnswer(id) {
+        try { await ForumAPI.upvoteAnswer(id); openQuestion(openQuestionId); }
+        catch(e) { /* silent */ }
+    }
+
+    async function acceptAnswer(questionId, answerId) {
+        try {
+            await ForumAPI.acceptAnswer(questionId, answerId);
+            openQuestion(questionId);
+        } catch(e) {
+            showAlert('alert-container', e.message);
+        }
+    }
+
+    init();
+</script>
+</body>
+</html>

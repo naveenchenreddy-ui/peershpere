@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard — PeerSphere</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="page-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="main-content">
+        <div class="top-bar">
+            <div class="page-title">
+                <h1 id="welcome-msg">Welcome back </h1>
+                <p>Here's what's happening in your learning community</p>
+            </div>
+        </div>
+
+        <!-- Stat Cards -->
+        <div class="grid-4" style="margin-bottom:28px;" id="stats-row">
+            <div class="stat-card">
+                <div class="stat-icon blue"></div>
+                <div>
+                    <div class="stat-value" id="stat-groups">—</div>
+                    <div class="stat-label">My Groups</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon green"></div>
+                <div>
+                    <div class="stat-value" id="stat-sessions">—</div>
+                    <div class="stat-label">Upcoming Sessions</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon purple"></div>
+                <div>
+                    <div class="stat-value" id="stat-notes">—</div>
+                    <div class="stat-label">Notes Shared</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon amber"></div>
+                <div>
+                    <div class="stat-value" id="stat-hours">—</div>
+                    <div class="stat-label">Hours Studied</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Grid -->
+        <div class="grid-2" style="margin-bottom:28px;">
+
+            <!-- Upcoming Sessions -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title"> Upcoming Sessions</h3>
+                    <a href="sessions.html" class="btn btn-outline btn-sm">View All</a>
+                </div>
+                <div id="sessions-list">
+                    <div class="loading-overlay"><div class="spinner"></div></div>
+                </div>
+            </div>
+
+            <!-- My Groups -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title"> My Groups</h3>
+                    <a href="groups.html" class="btn btn-outline btn-sm">View All</a>
+                </div>
+                <div id="groups-list">
+                    <div class="loading-overlay"><div class="spinner"></div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Grid -->
+        <div class="grid-2">
+
+            <!-- Recommended Peers -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title"> Recommended Peers</h3>
+                </div>
+                <div id="peers-list">
+                    <div class="loading-overlay"><div class="spinner"></div></div>
+                </div>
+            </div>
+
+            <!-- Progress Summary -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title"> This Week's Progress</h3>
+                    <a href="progress.html" class="btn btn-outline btn-sm">Details</a>
+                </div>
+                <div id="progress-summary">
+                    <div class="loading-overlay"><div class="spinner"></div></div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/utils.js"></script>
+<script>
+    requireAuth();
+    renderSidebar('dashboard');
+
+    const user = getCurrentUser();
+    document.getElementById('welcome-msg').textContent =
+        `Welcome back, ${user.fullName?.split(' ')[0]} `;
+
+    async function loadDashboard() {
+        try {
+            // Load all data in parallel for speed
+            const [sessions, groups, peers, progress, myNotes] = await Promise.allSettled([
+                SessionAPI.getMyUpcoming(),
+                GroupAPI.getMyGroups(),
+                RecommendAPI.getPeers(),
+                ProgressAPI.getSummary(),
+                NoteAPI.getMyNotes()
+            ]);
+
+            // Stats
+            document.getElementById('stat-sessions').textContent =
+                sessions.value?.length ?? 0;
+            document.getElementById('stat-groups').textContent =
+                groups.value?.length ?? 0;
+            document.getElementById('stat-notes').textContent =
+                myNotes.value?.length ?? 0;
+            document.getElementById('stat-hours').textContent =
+                progress.value?.totalStudyHours ?? 0;
+
+            // Upcoming Sessions
+            renderSessions(sessions.value ?? []);
+
+            // My Groups
+            renderGroups(groups.value ?? []);
+
+            // Recommended Peers
+            renderPeers(peers.value ?? []);
+
+            // Progress
+            renderProgress(progress.value);
+
+        } catch(e) {
+            console.error('Dashboard load error:', e);
+        }
+    }
+
+    function renderSessions(sessions) {
+        const el = document.getElementById('sessions-list');
+        if (!sessions.length) {
+            el.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon"></div>
+                    <p>No upcoming sessions</p>
+                    <a href="sessions.html" class="btn btn-primary btn-sm">Schedule One</a>
+                </div>`;
+            return;
+        }
+        el.innerHTML = sessions.slice(0, 4).map(s => `
+            <div style="display:flex;align-items:center;justify-content:space-between;
+                        padding:12px 0;border-bottom:1px solid var(--border);">
+                <div>
+                    <div style="font-weight:500;font-size:0.875rem;">${s.title}</div>
+                    <div style="font-size:0.75rem;color:var(--text-secondary);">
+                        ${formatDateTime(s.scheduledAt)} · ${s.groupName}
+                    </div>
+                </div>
+                <span class="badge badge-primary">${s.platform || 'Session'}</span>
+            </div>
+        `).join('');
+    }
+
+    function renderGroups(groups) {
+        const el = document.getElementById('groups-list');
+        if (!groups.length) {
+            el.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">👥</div>
+                    <p>You haven't joined any groups yet</p>
+                    <a href="groups.html" class="btn btn-primary btn-sm">Browse Groups</a>
+                </div>`;
+            return;
+        }
+        el.innerHTML = groups.slice(0, 5).map(g => `
+            <div style="display:flex;align-items:center;gap:12px;
+                        padding:10px 0;border-bottom:1px solid var(--border);">
+                <div style="width:36px;height:36px;background:var(--primary-light);
+                            border-radius:8px;display:flex;align-items:center;
+                            justify-content:center;font-size:1.1rem;">👥</div>
+                <div style="flex:1;">
+                    <div style="font-weight:500;font-size:0.875rem;">${g.name}</div>
+                    <div style="font-size:0.75rem;color:var(--text-secondary);">
+                        ${g.subject} · ${g.currentMemberCount} members
+                    </div>
+                </div>
+                <a href="groups.html" class="btn btn-outline btn-sm">View</a>
+            </div>
+        `).join('');
+    }
+
+    function renderPeers(peers) {
+        const el = document.getElementById('peers-list');
+        if (!peers.length) {
+            el.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon"></div>
+                    <p>Add skills and interests to your profile to get recommendations</p>
+                    <a href="profile.html" class="btn btn-primary btn-sm">Update Profile</a>
+                </div>`;
+            return;
+        }
+        el.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            ${peers.slice(0, 4).map(p => `
+                <div class="peer-card">
+                    <div class="avatar">${getInitials(p.fullName)}</div>
+                    <div>
+                        <div style="font-weight:600;font-size:0.875rem;">${p.fullName}</div>
+                        <div style="font-size:0.75rem;color:var(--text-secondary);">
+                            ${p.department || 'Student'}
+                        </div>
+                    </div>
+                    <div class="match-score"> Score: ${p.compatibilityScore}</div>
+                    <div style="font-size:0.72rem;color:var(--text-secondary);text-align:center;">
+                        ${p.matchReason}
+                    </div>
+                </div>
+            `).join('')}
+        </div>`;
+    }
+
+    function renderProgress(progress) {
+        const el = document.getElementById('progress-summary');
+        if (!progress) {
+            el.innerHTML = `
+                <div class="empty-state">
+                    <p>No progress logged yet</p>
+                    <a href="progress.html" class="btn btn-primary btn-sm">Log Study</a>
+                </div>`;
+            return;
+        }
+
+        const weeklyHtml = (progress.weeklyBreakdown || []).map(day => {
+            const level = day.minutesStudied === 0 ? ''
+                : day.minutesStudied < 60 ? 'low'
+                : day.minutesStudied < 120 ? 'medium' : 'high';
+            return `<div class="activity-day ${level}" title="${formatDate(day.date)}: ${day.minutesStudied}min"></div>`;
+        }).join('');
+
+        el.innerHTML = `
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px;">
+                <div style="text-align:center;">
+                    <div style="font-size:1.5rem;font-weight:700;color:var(--primary);">
+                        ${progress.totalStudyHours}h
+                    </div>
+                    <div style="font-size:0.75rem;color:var(--text-secondary);">Total Hours</div>
+                </div>
+                <div style="text-align:center;">
+                    <div style="font-size:1.5rem;font-weight:700;color:var(--success);">
+                        ${progress.totalTopicsCompleted}
+                    </div>
+                    <div style="font-size:0.75rem;color:var(--text-secondary);">Topics Done</div>
+                </div>
+                <div style="text-align:center;">
+                    <div style="font-size:1.5rem;font-weight:700;color:var(--warning);">
+                        🔥${progress.currentStreakDays}
+                    </div>
+                    <div style="font-size:0.75rem;color:var(--text-secondary);">Day Streak</div>
+                </div>
+            </div>
+            <div style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:8px;">
+                Last 7 days activity
+            </div>
+            <div class="activity-grid">${weeklyHtml}</div>
+            <div style="margin-top:16px;">
+                <div style="display:flex;justify-content:space-between;
+                            font-size:0.8rem;margin-bottom:6px;">
+                    <span>This week</span>
+                    <span>${progress.currentWeekMinutes} min</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill"
+                         style="width:${Math.min((progress.currentWeekMinutes/600)*100, 100)}%">
+                    </div>
+                </div>
+            </div>`;
+    }
+
+    loadDashboard();
+</script>
+</body>
+</html>

@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Progress Tracker — PeerSphere</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="page-layout">
+    <div id="sidebar-container"></div>
+    <main class="main-content">
+
+        <div class="top-bar">
+            <div class="page-title">
+                <h1>Progress Tracker</h1>
+                <p>Track your learning journey</p>
+            </div>
+            <button class="btn btn-primary" onclick="openModal('log-modal')">
+                + Log Study Session
+            </button>
+        </div>
+
+        <div id="alert-container"></div>
+
+        <!-- Summary Stats -->
+        <div class="grid-4" style="margin-bottom:28px;" id="summary-stats">
+            <div class="loading-overlay" style="grid-column:1/-1;">
+                <div class="spinner"></div>
+            </div>
+        </div>
+
+        <div class="grid-2">
+
+            <!-- Weekly Activity -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">📊 Weekly Activity</h3>
+                </div>
+                <div id="weekly-chart"></div>
+            </div>
+
+            <!-- Recent Entries -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">📋 Recent Entries</h3>
+                </div>
+                <div id="entries-list">
+                    <div class="loading-overlay"><div class="spinner"></div></div>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+</div>
+
+<!-- Log Progress Modal -->
+<div class="modal-overlay" id="log-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Log Study Session</h3>
+            <button class="modal-close" onclick="closeModal('log-modal')">✕</button>
+        </div>
+        <div id="modal-alert"></div>
+        <div class="form-group">
+            <label class="form-label">Topic Name *</label>
+            <input type="text" id="p-topic" class="form-control"
+                   placeholder="Spring Boot REST APIs">
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Date *</label>
+                <input type="date" id="p-date" class="form-control">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Duration (minutes) *</label>
+                <input type="number" id="p-minutes" class="form-control"
+                       value="60" min="1" max="720">
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Difficulty</label>
+            <select id="p-difficulty" class="form-control">
+                <option value="EASY">Easy</option>
+                <option value="MEDIUM" selected>Medium</option>
+                <option value="HARD">Hard</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Notes (optional)</label>
+            <textarea id="p-desc" class="form-control" rows="2"
+                      placeholder="What did you learn?"></textarea>
+        </div>
+        <div style="display:flex;gap:12px;justify-content:flex-end;">
+            <button class="btn btn-outline" onclick="closeModal('log-modal')">Cancel</button>
+            <button class="btn btn-primary" onclick="logProgress()">Save Entry</button>
+        </div>
+    </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/utils.js"></script>
+<script>
+    requireAuth();
+    renderSidebar('progress');
+
+    // Set today's date as default
+    document.getElementById('p-date').value = new Date().toISOString().split('T')[0];
+
+    async function loadProgress() {
+        try {
+            const [summary, entries] = await Promise.all([
+                ProgressAPI.getSummary(),
+                ProgressAPI.getMyProgress()
+            ]);
+            renderSummary(summary);
+            renderEntries(entries || []);
+            renderWeekly(summary?.weeklyBreakdown || []);
+        } catch(e) {
+            showAlert('alert-container', 'Failed to load progress');
+        }
+    }
+
+    function renderSummary(s) {
+        document.getElementById('summary-stats').innerHTML = `
+            <div class="stat-card">
+                <div class="stat-icon blue">⏱️</div>
+                <div>
+                    <div class="stat-value">${s?.totalStudyHours ?? 0}h</div>
+                    <div class="stat-label">Total Hours</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon green">✅</div>
+                <div>
+                    <div class="stat-value">${s?.totalTopicsCompleted ?? 0}</div>
+                    <div class="stat-label">Topics Done</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon amber">🔥</div>
+                <div>
+                    <div class="stat-value">${s?.currentStreakDays ?? 0}</div>
+                    <div class="stat-label">Day Streak</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon purple">📅</div>
+                <div>
+                    <div class="stat-value">${s?.currentWeekTopics ?? 0}</div>
+                    <div class="stat-label">This Week</div>
+                </div>
+            </div>`;
+    }
+
+    function renderWeekly(days) {
+        const el = document.getElementById('weekly-chart');
+        const max = Math.max(...days.map(d => d.minutesStudied), 1);
+        el.innerHTML = `
+            <div style="display:flex;align-items:flex-end;gap:8px;height:120px;">
+                ${days.map(d => {
+                    const pct = (d.minutesStudied / max) * 100;
+                    const day = new Date(d.date).toLocaleDateString('en',{weekday:'short'});
+                    return `
+                        <div style="flex:1;display:flex;flex-direction:column;
+                                    align-items:center;gap:4px;height:100%;">
+                            <div style="flex:1;display:flex;align-items:flex-end;width:100%;">
+                                <div style="width:100%;height:${Math.max(pct,4)}%;
+                                            background:var(--primary);border-radius:4px 4px 0 0;
+                                            transition:height 0.3s;"></div>
+                            </div>
+                            <div style="font-size:0.65rem;color:var(--text-secondary);">${day}</div>
+                            <div style="font-size:0.65rem;font-weight:600;">${d.minutesStudied}m</div>
+                        </div>`;
+                }).join('')}
+            </div>`;
+    }
+
+    function renderEntries(entries) {
+        const el = document.getElementById('entries-list');
+        if (!entries.length) {
+            el.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">📋</div>
+                    <p>No entries yet. Start logging!</p>
+                </div>`;
+            return;
+        }
+
+        const diffColors = { EASY: 'success', MEDIUM: 'warning', HARD: 'danger' };
+
+        el.innerHTML = entries.slice(0, 8).map(e => `
+            <div style="display:flex;align-items:center;gap:12px;
+                        padding:10px 0;border-bottom:1px solid var(--border);">
+                <div style="flex:1;">
+                    <div style="font-weight:500;font-size:0.875rem;">${e.topicName}</div>
+                    <div style="font-size:0.75rem;color:var(--text-secondary);">
+                        ${formatDate(e.studyDate)} · ${e.studyMinutes} min
+                    </div>
+                </div>
+                <span class="badge badge-${diffColors[e.difficulty] || 'gray'}">
+                    ${e.difficulty}
+                </span>
+                <button style="background:none;border:none;cursor:pointer;color:var(--danger);"
+                        onclick="deleteEntry(${e.id})">🗑️</button>
+            </div>
+        `).join('');
+    }
+
+    async function logProgress() {
+        const topic      = document.getElementById('p-topic').value.trim();
+        const date       = document.getElementById('p-date').value;
+        const minutes    = parseInt(document.getElementById('p-minutes').value);
+        const difficulty = document.getElementById('p-difficulty').value;
+        const desc       = document.getElementById('p-desc').value.trim();
+
+        if (!topic || !date || !minutes) {
+            showAlert('modal-alert', 'Topic, date and duration are required');
+            return;
+        }
+
+        try {
+            await ProgressAPI.logProgress({
+                topicName: topic,
+                studyDate: date,
+                studyMinutes: minutes,
+                difficulty,
+                description: desc
+            });
+            closeModal('log-modal');
+            showAlert('alert-container', 'Progress logged!', 'success');
+            loadProgress();
+        } catch(e) {
+            showAlert('modal-alert', e.message);
+        }
+    }
+
+    async function deleteEntry(id) {
+        if (!confirm('Delete this entry?')) return;
+        try {
+            await ProgressAPI.deleteEntry(id);
+            loadProgress();
+        } catch(e) {
+            showAlert('alert-container', e.message);
+        }
+    }
+
+    loadProgress();
+</script>
+</body>
+</html>

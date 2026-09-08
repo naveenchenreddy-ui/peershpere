@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sessions — PeerSphere</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="page-layout">
+    <div id="sidebar-container"></div>
+    <main class="main-content">
+
+        <div class="top-bar">
+            <div class="page-title">
+                <h1>Study Sessions</h1>
+                <p>Schedule and manage your study meetings</p>
+            </div>
+            <button class="btn btn-primary" onclick="openModal('session-modal')">
+                + Schedule Session
+            </button>
+        </div>
+
+        <div id="alert-container"></div>
+
+        <!-- Upcoming Sessions -->
+        <div class="card" style="margin-bottom:24px;">
+            <div class="card-header">
+                <h3 class="card-title">📅 My Upcoming Sessions</h3>
+            </div>
+            <div id="sessions-container">
+                <div class="loading-overlay"><div class="spinner"></div></div>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<!-- Schedule Session Modal -->
+<div class="modal-overlay" id="session-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Schedule Study Session</h3>
+            <button class="modal-close" onclick="closeModal('session-modal')">✕</button>
+        </div>
+        <div id="modal-alert"></div>
+        <div class="form-group">
+            <label class="form-label">Title *</label>
+            <input type="text" id="s-title" class="form-control"
+                   placeholder="Sorting Algorithms Deep Dive">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Description</label>
+            <textarea id="s-desc" class="form-control" rows="2"
+                      placeholder="What will you cover?"></textarea>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Date & Time *</label>
+                <input type="datetime-local" id="s-datetime" class="form-control">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Duration (minutes) *</label>
+                <input type="number" id="s-duration" class="form-control"
+                       value="60" min="15" max="480">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Mode *</label>
+                <select id="s-mode" class="form-control" onchange="toggleMode()">
+                    <option value="ONLINE">Online (Google Meet)</option>
+                    <option value="OFFLINE">Offline (Physical)</option>
+                </select>
+            </div>
+            <div class="form-group" id="location-group" style="display:none;">
+                <label class="form-label">Location</label>
+                <input type="text" id="s-location" class="form-control"
+                       placeholder="Library Room 204">
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Study Group *</label>
+            <select id="s-group" class="form-control">
+                <option value="">Loading groups...</option>
+            </select>
+        </div>
+        <div style="display:flex;gap:12px;justify-content:flex-end;">
+            <button class="btn btn-outline" onclick="closeModal('session-modal')">
+                Cancel
+            </button>
+            <button class="btn btn-primary" onclick="scheduleSession()">
+                Schedule
+            </button>
+        </div>
+    </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/utils.js"></script>
+<script>
+    requireAuth();
+    renderSidebar('sessions');
+
+    let myGroups = [];
+
+    async function init() {
+        try {
+            const [sessions, groups] = await Promise.all([
+                SessionAPI.getMyUpcoming(),
+                GroupAPI.getMyGroups()
+            ]);
+
+            myGroups = groups || [];
+
+            // Populate group dropdown
+            const select = document.getElementById('s-group');
+            select.innerHTML = myGroups.length
+                ? `<option value="">Select a group</option>` +
+                  myGroups.map(g => `<option value="${g.id}">${g.name}</option>`).join('')
+                : `<option value="">No groups — join one first</option>`;
+
+            renderSessions(sessions || []);
+        } catch(e) {
+            showAlert('alert-container', 'Failed to load sessions');
+        }
+    }
+
+    function toggleMode() {
+        const mode = document.getElementById('s-mode').value;
+        document.getElementById('location-group').style.display =
+            mode === 'OFFLINE' ? 'block' : 'none';
+    }
+
+    function renderSessions(sessions) {
+        const el = document.getElementById('sessions-container');
+        if (!sessions.length) {
+            el.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">📅</div>
+                    <h3>No upcoming sessions</h3>
+                    <p>Schedule a session with your study group</p>
+                </div>`;
+            return;
+        }
+
+        el.innerHTML = sessions.map(s => `
+            <div style="display:flex;align-items:center;justify-content:space-between;
+                        padding:16px 0;border-bottom:1px solid var(--border);">
+                <div style="display:flex;align-items:center;gap:16px;">
+                    <div style="width:48px;height:48px;background:var(--primary-light);
+                                border-radius:var(--radius-sm);display:flex;align-items:center;
+                                justify-content:center;font-size:1.4rem;">📅</div>
+                    <div>
+                        <div style="font-weight:600;">${s.title}</div>
+                        <div style="font-size:0.8rem;color:var(--text-secondary);">
+                            ${formatDateTime(s.scheduledAt)} · ${s.durationMinutes} min ·
+                            ${s.groupName}
+                        </div>
+                        <div style="margin-top:4px;">
+                            <span class="badge ${s.mode === 'ONLINE'
+                                ? 'badge-primary' : 'badge-gray'}">
+                                ${s.mode === 'ONLINE' ? '🎥 Online' : '📍 Offline'}
+                            </span>
+                            <span class="badge badge-success" style="margin-left:4px;">
+                                ${s.status}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    ${s.meetingLink
+                        ? `<a href="${s.meetingLink}" target="_blank"
+                              class="btn btn-primary btn-sm">
+                               🎥 Join Meet
+                           </a>`
+                        : s.location
+                        ? `<span style="font-size:0.8rem;color:var(--text-secondary);">
+                               📍 ${s.location}
+                           </span>`
+                        : ''}
+                    <button class="btn btn-outline btn-sm"
+                            onclick="cancelSession(${s.id})">Cancel</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async function scheduleSession() {
+        const title    = document.getElementById('s-title').value.trim();
+        const desc     = document.getElementById('s-desc').value.trim();
+        const datetime = document.getElementById('s-datetime').value;
+        const duration = parseInt(document.getElementById('s-duration').value);
+        const mode     = document.getElementById('s-mode').value;
+        const location = document.getElementById('s-location').value.trim();
+        const groupId  = document.getElementById('s-group').value;
+
+        if (!title || !datetime || !groupId) {
+            showAlert('modal-alert', 'Title, date/time and group are required');
+            return;
+        }
+
+        if (mode === 'OFFLINE' && !location) {
+            showAlert('modal-alert', 'Location is required for offline sessions');
+            return;
+        }
+
+        const payload = {
+            title,
+            description: desc,
+            scheduledAt: new Date(datetime).toISOString().slice(0, 19),
+            durationMinutes: duration,
+            mode,
+            location: mode === 'OFFLINE' ? location : undefined,
+            groupId: parseInt(groupId)
+        };
+
+        try {
+            const session = await SessionAPI.createSession(payload);
+            closeModal('session-modal');
+            const msg = session.meetingLink
+                ? `Session scheduled! Meet link: ${session.meetingLink}`
+                : 'Session scheduled!';
+            showAlert('alert-container', msg, 'success');
+            await init();
+        } catch(e) {
+            showAlert('modal-alert', e.message);
+        }
+    }
+
+    async function cancelSession(id) {
+        if (!confirm('Cancel this session?')) return;
+        try {
+            await SessionAPI.cancelSession(id);
+            showAlert('alert-container', 'Session cancelled', 'success');
+            await init();
+        } catch(e) {
+            showAlert('alert-container', e.message);
+        }
+    }
+
+    init();
+</script>
+</body>
+</html>

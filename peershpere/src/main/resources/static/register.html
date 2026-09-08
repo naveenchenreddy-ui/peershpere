@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register — PeerSphere</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="auth-page">
+    <div class="auth-card" style="max-width:520px;">
+        <div class="auth-logo">
+            <h1>🎓 PeerSphere</h1>
+            <p>Create your free account</p>
+        </div>
+
+        <div id="alert-container"></div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Full Name</label>
+                <input type="text" id="fullName" class="form-control"
+                       placeholder="Rahul Sharma">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Email Address</label>
+                <input type="email" id="email" class="form-control"
+                       placeholder="you@example.com">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Department</label>
+                <select id="department" class="form-control">
+                    <option value="">Select Department</option>
+                    <option>Computer Science</option>
+                    <option>Information Technology</option>
+                    <option>Electronics</option>
+                    <option>Mechanical</option>
+                    <option>Civil</option>
+                    <option>Mathematics</option>
+                    <option>Physics</option>
+                    <option>Chemistry</option>
+                    <option>MBA</option>
+                    <option>Other</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Semester</label>
+                <select id="semester" class="form-control">
+                    <option value="">Select Semester</option>
+                    <option>1st</option><option>2nd</option>
+                    <option>3rd</option><option>4th</option>
+                    <option>5th</option><option>6th</option>
+                    <option>7th</option><option>8th</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" id="password" class="form-control"
+                   placeholder="At least 8 characters">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Confirm Password</label>
+            <input type="password" id="confirmPassword" class="form-control"
+                   placeholder="Re-enter your password">
+        </div>
+
+        <button class="btn btn-primary"
+                style="width:100%;justify-content:center;padding:12px;"
+                id="register-btn" onclick="handleRegister()">
+            Create Account
+        </button>
+
+        <div class="auth-footer">
+            Already have an account? <a href="login.html">Sign in</a>
+        </div>
+    </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/utils.js"></script>
+<script>
+    if (localStorage.getItem('token')) {
+        window.location.href = 'dashboard.html';
+    }
+
+    async function handleRegister() {
+        const fullName        = document.getElementById('fullName').value.trim();
+        const email           = document.getElementById('email').value.trim();
+        const department      = document.getElementById('department').value;
+        const semester        = document.getElementById('semester').value;
+        const password        = document.getElementById('password').value;
+        const confirmPassword = document.getElementById('confirmPassword').value;
+        const btn             = document.getElementById('register-btn');
+
+        if (!fullName || !email || !password || !confirmPassword) {
+            showAlert('alert-container', 'Please fill in all required fields');
+            return;
+        }
+
+        if (password.length < 8) {
+            showAlert('alert-container', 'Password must be at least 8 characters');
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            showAlert('alert-container', 'Passwords do not match');
+            return;
+        }
+
+        btn.textContent = 'Creating account...';
+        btn.disabled = true;
+
+        try {
+            const data = await AuthAPI.register({
+                fullName, email, password, department, semester
+            });
+            saveAuth(data);
+            window.location.href = 'dashboard.html';
+        } catch (err) {
+            showAlert('alert-container', err.message || 'Registration failed');
+            btn.textContent = 'Create Account';
+            btn.disabled = false;
+        }
+    }
+</script>
+</body>
+</html>

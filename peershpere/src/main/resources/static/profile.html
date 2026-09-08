@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile — PeerSphere</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="page-layout">
+    <div id="sidebar-container"></div>
+    <main class="main-content">
+
+        <div class="top-bar">
+            <div class="page-title">
+                <h1>My Profile</h1>
+                <p>Manage your academic profile</p>
+            </div>
+        </div>
+
+        <div id="alert-container"></div>
+
+        <div class="grid-2">
+
+            <!-- Profile Card -->
+            <div class="card">
+                <div style="text-align:center;margin-bottom:24px;">
+                    <div class="avatar" id="profile-avatar"
+                         style="width:80px;height:80px;font-size:2rem;margin:0 auto 16px;">
+                    </div>
+                    <h2 id="profile-name">Loading...</h2>
+                    <p style="color:var(--text-secondary);font-size:0.875rem;"
+                       id="profile-email"></p>
+                    <span class="badge badge-primary" style="margin-top:8px;"
+                          id="profile-dept"></span>
+                </div>
+
+                <form id="profile-form">
+                    <div class="form-group">
+                        <label class="form-label">Full Name</label>
+                        <input type="text" id="fullName" class="form-control">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Department</label>
+                            <select id="department" class="form-control">
+                                <option value="">Select</option>
+                                <option>Computer Science</option>
+                                <option>Information Technology</option>
+                                <option>Electronics</option>
+                                <option>Mechanical</option>
+                                <option>Civil</option>
+                                <option>Mathematics</option>
+                                <option>Physics</option>
+                                <option>Chemistry</option>
+                                <option>MBA</option>
+                                <option>Other</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Semester</label>
+                            <select id="semester" class="form-control">
+                                <option value="">Select</option>
+                                <option>1st</option><option>2nd</option>
+                                <option>3rd</option><option>4th</option>
+                                <option>5th</option><option>6th</option>
+                                <option>7th</option><option>8th</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Bio</label>
+                        <textarea id="bio" class="form-control" rows="3"
+                                  placeholder="Tell peers about yourself..."></textarea>
+                    </div>
+                    <button type="button" class="btn btn-primary"
+                            onclick="saveProfile()">
+                        Save Changes
+                    </button>
+                </form>
+            </div>
+
+            <!-- Skills & Interests -->
+            <div>
+                <!-- Skills -->
+                <div class="card" style="margin-bottom:24px;">
+                    <div class="card-header">
+                        <h3 class="card-title">🛠️ Skills</h3>
+                    </div>
+                    <div id="skills-container" style="margin-bottom:16px;min-height:32px;"></div>
+                    <div style="display:flex;gap:8px;">
+                        <input type="text" id="skill-input" class="form-control"
+                               placeholder="e.g. Java, Python, MySQL"
+                               onkeypress="if(event.key==='Enter')addSkill()">
+                        <button class="btn btn-primary btn-sm" onclick="addSkill()">Add</button>
+                    </div>
+                </div>
+
+                <!-- Interests -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">💡 Academic Interests</h3>
+                    </div>
+                    <div id="interests-container" style="margin-bottom:16px;min-height:32px;"></div>
+                    <div style="display:flex;gap:8px;">
+                        <input type="text" id="interest-input" class="form-control"
+                               placeholder="e.g. Machine Learning, Web Dev"
+                               onkeypress="if(event.key==='Enter')addInterest()">
+                        <button class="btn btn-primary btn-sm" onclick="addInterest()">Add</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/utils.js"></script>
+<script>
+    requireAuth();
+    renderSidebar('profile');
+
+    let profile = null;
+
+    async function loadProfile() {
+        try {
+            profile = await UserAPI.getMyProfile();
+            document.getElementById('profile-avatar').textContent = getInitials(profile.fullName);
+            document.getElementById('profile-name').textContent   = profile.fullName;
+            document.getElementById('profile-email').textContent  = profile.email;
+            document.getElementById('profile-dept').textContent   =
+                profile.department || 'No department';
+            document.getElementById('fullName').value    = profile.fullName || '';
+            document.getElementById('department').value  = profile.department || '';
+            document.getElementById('semester').value    = profile.semester || '';
+            document.getElementById('bio').value         = profile.bio || '';
+
+            renderSkills(profile.skills || []);
+            renderInterests(profile.interests || []);
+        } catch(e) {
+            showAlert('alert-container', 'Failed to load profile');
+        }
+    }
+
+    function renderSkills(skills) {
+        document.getElementById('skills-container').innerHTML = skills.length
+            ? skills.map(s => `
+                <span class="tag" style="cursor:pointer;" onclick="removeSkill('${s}')">
+                    ${s} ✕
+                </span>`).join('')
+            : '<span style="color:var(--text-secondary);font-size:0.875rem;">No skills added yet</span>';
+    }
+
+    function renderInterests(interests) {
+        document.getElementById('interests-container').innerHTML = interests.length
+            ? interests.map(i => `
+                <span class="tag" style="cursor:pointer;" onclick="removeInterest('${i}')">
+                    ${i} ✕
+                </span>`).join('')
+            : '<span style="color:var(--text-secondary);font-size:0.875rem;">No interests added yet</span>';
+    }
+
+    async function saveProfile() {
+        const data = {
+            fullName:   document.getElementById('fullName').value.trim(),
+            department: document.getElementById('department').value,
+            semester:   document.getElementById('semester').value,
+            bio:        document.getElementById('bio').value.trim()
+        };
+        try {
+            profile = await UserAPI.updateProfile(data);
+            showAlert('alert-container', 'Profile updated successfully!', 'success');
+            document.getElementById('profile-name').textContent = profile.fullName;
+            document.getElementById('profile-avatar').textContent = getInitials(profile.fullName);
+            localStorage.setItem('fullName', profile.fullName);
+        } catch(e) {
+            showAlert('alert-container', e.message);
+        }
+    }
+
+    async function addSkill() {
+        const input = document.getElementById('skill-input');
+        const value = input.value.trim();
+        if (!value) return;
+        try {
+            profile = await UserAPI.addSkill(value);
+            renderSkills(profile.skills);
+            input.value = '';
+        } catch(e) {
+            showAlert('alert-container', e.message);
+        }
+    }
+
+    async function removeSkill(skill) {
+        try {
+            profile = await UserAPI.removeSkill(skill);
+            renderSkills(profile.skills);
+        } catch(e) {
+            showAlert('alert-container', e.message);
+        }
+    }
+
+    async function addInterest() {
+        const input = document.getElementById('interest-input');
+        const value = input.value.trim();
+        if (!value) return;
+        try {
+            profile = await UserAPI.addInterest(value);
+            renderInterests(profile.interests);
+            input.value = '';
+        } catch(e) {
+            showAlert('alert-container', e.message);
+        }
+    }
+
+    async function removeInterest(interest) {
+        try {
+            profile = await UserAPI.removeInterest(interest);
+            renderInterests(profile.interests);
+        } catch(e) {
+            showAlert('alert-container', e.message);
+        }
+    }
+
+    loadProfile();
+</script>
+</body>
+</html>

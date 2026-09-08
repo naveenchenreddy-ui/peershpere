@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notes — PeerSphere</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="page-layout">
+    <div id="sidebar-container"></div>
+    <main class="main-content">
+
+        <div class="top-bar">
+            <div class="page-title">
+                <h1>Notes</h1>
+                <p>Share and discover study materials</p>
+            </div>
+            <div class="top-bar-actions">
+                <div class="search-bar">
+                    <span>🔍</span>
+                    <input type="text" placeholder="Search notes..."
+                           oninput="handleSearch(this.value)">
+                </div>
+                <button class="btn btn-primary" onclick="openModal('upload-modal')">
+                    + Upload Note
+                </button>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div style="display:flex;gap:8px;margin-bottom:24px;">
+            <button class="btn btn-primary btn-sm" id="tab-public"
+                    onclick="switchTab('public')">Public</button>
+            <button class="btn btn-outline btn-sm" id="tab-mine"
+                    onclick="switchTab('mine')">My Notes</button>
+            <button class="btn btn-outline btn-sm" id="tab-bookmarks"
+                    onclick="switchTab('bookmarks')">Bookmarks</button>
+        </div>
+
+        <div id="alert-container"></div>
+
+        <div id="notes-container" class="grid-3">
+            <div class="loading-overlay"><div class="spinner"></div></div>
+        </div>
+
+    </main>
+</div>
+
+<!-- Upload Modal -->
+<div class="modal-overlay" id="upload-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Upload Note</h3>
+            <button class="modal-close" onclick="closeModal('upload-modal')">✕</button>
+        </div>
+        <div id="modal-alert"></div>
+        <div class="form-group">
+            <label class="form-label">Title *</label>
+            <input type="text" id="n-title" class="form-control"
+                   placeholder="Spring Boot Complete Guide">
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Subject *</label>
+                <input type="text" id="n-subject" class="form-control"
+                       placeholder="Java Programming">
+            </div>
+            <div class="form-group">
+                <label class="form-label">File Type</label>
+                <select id="n-type" class="form-control">
+                    <option value="PDF">PDF</option>
+                    <option value="DOCX">DOCX</option>
+                    <option value="PPT">PPT</option>
+                    <option value="OTHER">Other</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">File URL *</label>
+            <input type="url" id="n-url" class="form-control"
+                   placeholder="https://drive.google.com/...">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Description</label>
+            <textarea id="n-desc" class="form-control" rows="2"
+                      placeholder="What does this note cover?"></textarea>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Tags (comma-separated)</label>
+            <input type="text" id="n-tags" class="form-control"
+                   placeholder="java,spring,backend">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Study Group (optional)</label>
+            <select id="n-group" class="form-control">
+                <option value="">Public (visible to everyone)</option>
+            </select>
+        </div>
+        <div style="display:flex;gap:12px;justify-content:flex-end;">
+            <button class="btn btn-outline" onclick="closeModal('upload-modal')">Cancel</button>
+            <button class="btn btn-primary" onclick="uploadNote()">Upload</button>
+        </div>
+    </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/utils.js"></script>
+<script>
+    requireAuth();
+    renderSidebar('notes');
+
+    let currentTab = 'public';
+
+    async function init() {
+        try {
+            const groups = await GroupAPI.getMyGroups();
+            const select = document.getElementById('n-group');
+            if (groups?.length) {
+                select.innerHTML = `<option value="">Public (visible to everyone)</option>` +
+                    groups.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+            }
+        } catch(e) { /* silent */ }
+        loadNotes('public');
+    }
+
+    function switchTab(tab) {
+        currentTab = tab;
+        ['public','mine','bookmarks'].forEach(t => {
+            document.getElementById(`tab-${t}`).className =
+                `btn btn-sm ${t === tab ? 'btn-primary' : 'btn-outline'}`;
+        });
+        loadNotes(tab);
+    }
+
+    async function loadNotes(tab) {
+        showLoading('notes-container');
+        try {
+            let notes;
+            if (tab === 'public')    notes = await NoteAPI.getPublicNotes();
+            else if (tab === 'mine') notes = await NoteAPI.getMyNotes();
+            else                     notes = await NoteAPI.getBookmarks();
+            renderNotes(notes || []);
+        } catch(e) {
+            showAlert('alert-container', 'Failed to load notes');
+        }
+    }
+
+    async function handleSearch(keyword) {
+        if (!keyword.trim()) { loadNotes(currentTab); return; }
+        try {
+            const results = await NoteAPI.searchNotes(keyword);
+            renderNotes(results);
+        } catch(e) { /* silent */ }
+    }
+
+    function renderNotes(notes) {
+        const el = document.getElementById('notes-container');
+        if (!notes.length) {
+            el.innerHTML = `
+                <div class="empty-state" style="grid-column:1/-1;">
+                    <div class="empty-state-icon">📝</div>
+                    <h3>No notes found</h3>
+                    <p>Be the first to share study materials!</p>
+                </div>`;
+            return;
+        }
+
+        el.innerHTML = notes.map(n => `
+            <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+                <div>
+                    <div style="display:flex;justify-content:space-between;
+                                align-items:flex-start;margin-bottom:8px;">
+                        <h4>${n.title}</h4>
+                        <span class="badge badge-gray">${n.fileType || 'FILE'}</span>
+                    </div>
+                    <div style="font-size:0.75rem;color:var(--primary);font-weight:500;">
+                        ${n.subject}
+                    </div>
+                    <p style="font-size:0.8rem;color:var(--text-secondary);margin:8px 0;">
+                        ${n.description || 'No description'}
+                    </p>
+                    <div>${renderTags(n.tags)}</div>
+                </div>
+                <div style="font-size:0.75rem;color:var(--text-secondary);">
+                    By ${n.uploadedByName} · ${timeAgo(n.createdAt)}
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <button class="vote-btn ${n.likedByCurrentUser ? 'active' : ''}"
+                            onclick="toggleLike(${n.id}, this)">
+                        ❤️ ${n.likeCount}
+                    </button>
+                    <button class="vote-btn ${n.bookmarkedByCurrentUser ? 'active' : ''}"
+                            onclick="toggleBookmark(${n.id}, this)">
+                        🔖 ${n.bookmarkedByCurrentUser ? 'Saved' : 'Save'}
+                    </button>
+                    <a href="${n.fileUrl}" target="_blank"
+                       onclick="trackDownload(${n.id})"
+                       class="btn btn-primary btn-sm" style="margin-left:auto;">
+                        ⬇️ ${n.downloadCount}
+                    </a>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async function uploadNote() {
+        const title   = document.getElementById('n-title').value.trim();
+        const subject = document.getElementById('n-subject').value.trim();
+        const url     = document.getElementById('n-url').value.trim();
+        const type    = document.getElementById('n-type').value;
+        const desc    = document.getElementById('n-desc').value.trim();
+        const tags    = document.getElementById('n-tags').value.trim();
+        const groupId = document.getElementById('n-group').value;
+
+        if (!title || !subject || !url) {
+            showAlert('modal-alert', 'Title, subject and URL are required');
+            return;
+        }
+
+        try {
+            await NoteAPI.uploadNote({
+                title, subject, fileUrl: url, fileType: type,
+                description: desc, tags,
+                groupId: groupId ? parseInt(groupId) : null
+            });
+            closeModal('upload-modal');
+            showAlert('alert-container', 'Note uploaded!', 'success');
+            loadNotes(currentTab);
+        } catch(e) {
+            showAlert('modal-alert', e.message);
+        }
+    }
+
+    async function toggleLike(id, btn) {
+        try {
+            const note = await NoteAPI.toggleLike(id);
+            btn.className = `vote-btn ${note.likedByCurrentUser ? 'active' : ''}`;
+            btn.innerHTML = `❤️ ${note.likeCount}`;
+        } catch(e) { /* silent */ }
+    }
+
+    async function toggleBookmark(id, btn) {
+        try {
+            const note = await NoteAPI.toggleBookmark(id);
+            btn.className = `vote-btn ${note.bookmarkedByCurrentUser ? 'active' : ''}`;
+            btn.innerHTML = `🔖 ${note.bookmarkedByCurrentUser ? 'Saved' : 'Save'}`;
+        } catch(e) { /* silent */ }
+    }
+
+    async function trackDownload(id) {
+        try { await NoteAPI.trackDownload(id); } catch(e) { /* silent */ }
+    }
+
+    init();
+</script>
+</body>
+</html>

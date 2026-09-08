@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notifications — PeerSphere</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="page-layout">
+    <div id="sidebar-container"></div>
+    <main class="main-content">
+
+        <div class="top-bar">
+            <div class="page-title">
+                <h1>Notifications</h1>
+                <p>Stay updated with your learning community</p>
+            </div>
+            <button class="btn btn-outline" onclick="markAllRead()">
+                ✓ Mark all as read
+            </button>
+        </div>
+
+        <div id="alert-container"></div>
+
+        <div class="card">
+            <div id="notif-container">
+                <div class="loading-overlay"><div class="spinner"></div></div>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/utils.js"></script>
+<script>
+    requireAuth();
+    renderSidebar('notifications');
+
+    const typeIcons = {
+        NEW_ANSWER:      '💬',
+        ANSWER_ACCEPTED: '✅',
+        NEW_SESSION:     '📅',
+        SESSION_CANCELLED:'❌',
+        NEW_MEMBER:      '👥',
+        NEW_NOTE:        '📝',
+        QUESTION_UPVOTE: '▲',
+        ANSWER_UPVOTE:   '▲'
+    };
+
+    async function loadNotifications() {
+        try {
+            const notifs = await NotifAPI.getAll();
+            renderNotifications(notifs || []);
+        } catch(e) {
+            showAlert('alert-container', 'Failed to load notifications');
+        }
+    }
+
+    function renderNotifications(notifs) {
+        const el = document.getElementById('notif-container');
+        if (!notifs.length) {
+            el.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔔</div>
+                    <h3>All caught up!</h3>
+                    <p>No notifications yet</p>
+                </div>`;
+            return;
+        }
+
+        el.innerHTML = notifs.map(n => `
+            <div style="display:flex;align-items:flex-start;gap:16px;
+                        padding:16px 0;border-bottom:1px solid var(--border);
+                        background:${!n.isRead ? 'var(--primary-light)' : 'transparent'};
+                        border-radius:8px;padding:12px;margin-bottom:4px;
+                        cursor:pointer;"
+                 onclick="readNotif(${n.id}, this)">
+                <div style="width:40px;height:40px;background:var(--primary-light);
+                            border-radius:50%;display:flex;align-items:center;
+                            justify-content:center;font-size:1.2rem;flex-shrink:0;">
+                    ${typeIcons[n.type] || '🔔'}
+                </div>
+                <div style="flex:1;">
+                    <div style="font-weight:${!n.isRead ? '600' : '400'};margin-bottom:4px;">
+                        ${n.title}
+                    </div>
+                    <div style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:4px;">
+                        ${n.message}
+                    </div>
+                    <div style="font-size:0.72rem;color:var(--text-secondary);">
+                        ${n.triggeredByName ? `by ${n.triggeredByName} · ` : ''}
+                        ${timeAgo(n.createdAt)}
+                    </div>
+                </div>
+                ${!n.isRead
+                    ? '<div style="width:8px;height:8px;background:var(--primary);border-radius:50%;margin-top:6px;"></div>'
+                    : ''}
+                <button onclick="event.stopPropagation();deleteNotif(${n.id})"
+                        style="background:none;border:none;cursor:pointer;
+                               color:var(--text-secondary);font-size:1rem;">
+                    🗑️
+                </button>
+            </div>
+        `).join('');
+    }
+
+    async function readNotif(id, el) {
+        try {
+            await NotifAPI.markAsRead(id);
+            el.style.background = 'transparent';
+            const dot = el.querySelector('[style*="width:8px"]');
+            if (dot) dot.remove();
+        } catch(e) { /* silent */ }
+    }
+
+    async function markAllRead() {
+        try {
+            await NotifAPI.markAllAsRead();
+            showAlert('alert-container', 'All marked as read', 'success');
+            loadNotifications();
+        } catch(e) {
+            showAlert('alert-container', e.message);
+        }
+    }
+
+    async function deleteNotif(id) {
+        try {
+            await NotifAPI.delete(id);
+            loadNotifications();
+        } catch(e) { /* silent */ }
+    }
+
+    loadNotifications();
+</script>
+</body>
+</html>

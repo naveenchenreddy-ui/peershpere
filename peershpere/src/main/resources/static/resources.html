@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resources — PeerSphere</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="page-layout">
+    <div id="sidebar-container"></div>
+    <main class="main-content">
+
+        <div class="top-bar">
+            <div class="page-title">
+                <h1>Learning Resources</h1>
+                <p>Curated links shared by your community</p>
+            </div>
+            <div class="top-bar-actions">
+                <div class="search-bar">
+                    <span>🔍</span>
+                    <input type="text" placeholder="Search resources..."
+                           oninput="handleSearch(this.value)">
+                </div>
+                <button class="btn btn-primary" onclick="openModal('share-modal')">
+                    + Share Resource
+                </button>
+            </div>
+        </div>
+
+        <!-- Type Filters -->
+        <div style="display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap;">
+            <button class="btn btn-primary btn-sm" id="filter-all"
+                    onclick="filterByType('all')">All</button>
+            <button class="btn btn-outline btn-sm" id="filter-VIDEO"
+                    onclick="filterByType('VIDEO')">🎥 Videos</button>
+            <button class="btn btn-outline btn-sm" id="filter-ARTICLE"
+                    onclick="filterByType('ARTICLE')">📰 Articles</button>
+            <button class="btn btn-outline btn-sm" id="filter-DOCUMENTATION"
+                    onclick="filterByType('DOCUMENTATION')">📚 Docs</button>
+            <button class="btn btn-outline btn-sm" id="filter-GITHUB"
+                    onclick="filterByType('GITHUB')">💻 GitHub</button>
+            <button class="btn btn-outline btn-sm" id="filter-COURSE"
+                    onclick="filterByType('COURSE')">🎓 Courses</button>
+        </div>
+
+        <div id="alert-container"></div>
+
+        <div id="resources-container" class="grid-3">
+            <div class="loading-overlay"><div class="spinner"></div></div>
+        </div>
+
+    </main>
+</div>
+
+<!-- Share Resource Modal -->
+<div class="modal-overlay" id="share-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Share a Resource</h3>
+            <button class="modal-close" onclick="closeModal('share-modal')">✕</button>
+        </div>
+        <div id="modal-alert"></div>
+        <div class="form-group">
+            <label class="form-label">Title *</label>
+            <input type="text" id="r-title" class="form-control"
+                   placeholder="Spring Boot Official Documentation">
+        </div>
+        <div class="form-group">
+            <label class="form-label">URL *</label>
+            <input type="url" id="r-url" class="form-control"
+                   placeholder="https://...">
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Type *</label>
+                <select id="r-type" class="form-control">
+                    <option value="VIDEO">Video</option>
+                    <option value="ARTICLE">Article</option>
+                    <option value="DOCUMENTATION">Documentation</option>
+                    <option value="GITHUB">GitHub</option>
+                    <option value="COURSE">Course</option>
+                    <option value="RESEARCH_PAPER">Research Paper</option>
+                    <option value="OTHER">Other</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Group (optional)</label>
+                <select id="r-group" class="form-control">
+                    <option value="">Public</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Description</label>
+            <textarea id="r-desc" class="form-control" rows="2"
+                      placeholder="What is this resource about?"></textarea>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Tags</label>
+            <input type="text" id="r-tags" class="form-control"
+                   placeholder="java,spring,backend">
+        </div>
+        <div style="display:flex;gap:12px;justify-content:flex-end;">
+            <button class="btn btn-outline" onclick="closeModal('share-modal')">Cancel</button>
+            <button class="btn btn-primary" onclick="shareResource()">Share</button>
+        </div>
+    </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/utils.js"></script>
+<script>
+    requireAuth();
+    renderSidebar('resources');
+
+    let currentFilter = 'all';
+    const typeIcons = {
+        VIDEO:'🎥', ARTICLE:'📰', DOCUMENTATION:'📚',
+        GITHUB:'💻', COURSE:'🎓', RESEARCH_PAPER:'📄', OTHER:'🔗'
+    };
+
+    async function init() {
+        try {
+            const groups = await GroupAPI.getMyGroups();
+            const select = document.getElementById('r-group');
+            if (groups?.length) {
+                select.innerHTML = `<option value="">Public</option>` +
+                    groups.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+            }
+        } catch(e) { /* silent */ }
+        loadResources();
+    }
+
+    async function loadResources() {
+        showLoading('resources-container');
+        try {
+            const resources = await ResourceAPI.getPublicResources();
+            renderResources(resources || []);
+        } catch(e) {
+            showAlert('alert-container', 'Failed to load resources');
+        }
+    }
+
+    async function filterByType(type) {
+        currentFilter = type;
+        document.querySelectorAll('[id^="filter-"]').forEach(btn => {
+            btn.className = 'btn btn-sm btn-outline';
+        });
+        document.getElementById(`filter-${type}`).className = 'btn btn-sm btn-primary';
+
+        showLoading('resources-container');
+        try {
+            const resources = type === 'all'
+                ? await ResourceAPI.getPublicResources()
+                : await ResourceAPI.getByType(type);
+            renderResources(resources || []);
+        } catch(e) {
+            showAlert('alert-container', 'Failed to filter resources');
+        }
+    }
+
+    async function handleSearch(keyword) {
+        if (!keyword.trim()) { loadResources(); return; }
+        try {
+            const results = await ResourceAPI.searchResources(keyword);
+            renderResources(results);
+        } catch(e) { /* silent */ }
+    }
+
+    function renderResources(resources) {
+        const el = document.getElementById('resources-container');
+        if (!resources.length) {
+            el.innerHTML = `
+                <div class="empty-state" style="grid-column:1/-1;">
+                    <div class="empty-state-icon">🔗</div>
+                    <h3>No resources found</h3>
+                    <p>Share something useful with the community!</p>
+                </div>`;
+            return;
+        }
+
+        el.innerHTML = resources.map(r => `
+            <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+                <div>
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                        <span style="font-size:1.4rem;">${typeIcons[r.resourceType] || '🔗'}</span>
+                        <span class="badge badge-gray">${r.resourceType}</span>
+                    </div>
+                    <h4 style="margin-bottom:6px;">${r.title}</h4>
+                    <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:8px;">
+                        ${r.description || 'No description'}
+                    </p>
+                    <div>${renderTags(r.tags)}</div>
+                </div>
+                <div style="font-size:0.75rem;color:var(--text-secondary);">
+                    By ${r.sharedByName} · ${timeAgo(r.createdAt)}
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <button class="vote-btn ${r.likedByCurrentUser ? 'active' : ''}"
+                            onclick="toggleLike(${r.id},this)">
+                        ❤️ ${r.likeCount}
+                    </button>
+                    <button class="vote-btn ${r.bookmarkedByCurrentUser ? 'active' : ''}"
+                            onclick="toggleBookmark(${r.id},this)">
+                        🔖
+                    </button>
+                    <a href="${r.url}" target="_blank"
+                       onclick="trackView(${r.id})"
+                       class="btn btn-primary btn-sm" style="margin-left:auto;">
+                        Open ↗
+                    </a>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async function shareResource() {
+        const title   = document.getElementById('r-title').value.trim();
+        const url     = document.getElementById('r-url').value.trim();
+        const type    = document.getElementById('r-type').value;
+        const groupId = document.getElementById('r-group').value;
+        const desc    = document.getElementById('r-desc').value.trim();
+        const tags    = document.getElementById('r-tags').value.trim();
+
+        if (!title || !url) {
+            showAlert('modal-alert', 'Title and URL are required');
+            return;
+        }
+
+        try {
+            await ResourceAPI.shareResource({
+                title, url, resourceType: type, description: desc, tags,
+                groupId: groupId ? parseInt(groupId) : null
+            });
+            closeModal('share-modal');
+            showAlert('alert-container', 'Resource shared!', 'success');
+            loadResources();
+        } catch(e) {
+            showAlert('modal-alert', e.message);
+        }
+    }
+
+    async function toggleLike(id, btn) {
+        try {
+            const r = await ResourceAPI.toggleLike(id);
+            btn.className = `vote-btn ${r.likedByCurrentUser ? 'active' : ''}`;
+            btn.innerHTML = `❤️ ${r.likeCount}`;
+        } catch(e) { /* silent */ }
+    }
+
+    async function toggleBookmark(id, btn) {
+        try {
+            const r = await ResourceAPI.toggleBookmark(id);
+            btn.className = `vote-btn ${r.bookmarkedByCurrentUser ? 'active' : ''}`;
+        } catch(e) { /* silent */ }
+    }
+
+    async function trackView(id) {
+        try { await ResourceAPI.trackView(id); } catch(e) { /* silent */ }
+    }
+
+    init();
+</script>
+</body>
+</html>

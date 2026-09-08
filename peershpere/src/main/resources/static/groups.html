@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Study Groups — PeerSphere</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="page-layout">
+    <div id="sidebar-container"></div>
+    <main class="main-content">
+
+        <div class="top-bar">
+            <div class="page-title">
+                <h1>Study Groups</h1>
+                <p>Join or create study groups for your subjects</p>
+            </div>
+            <div class="top-bar-actions">
+                <div class="search-bar">
+                    <span>🔍</span>
+                    <input type="text" placeholder="Search groups..."
+                           id="search-input" oninput="handleSearch(this.value)">
+                </div>
+                <button class="btn btn-primary" onclick="openModal('create-modal')">
+                    + Create Group
+                </button>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div style="display:flex;gap:8px;margin-bottom:24px;">
+            <button class="btn btn-primary btn-sm" id="tab-all"
+                    onclick="switchTab('all')">All Groups</button>
+            <button class="btn btn-outline btn-sm" id="tab-mine"
+                    onclick="switchTab('mine')">My Groups</button>
+        </div>
+
+        <div id="alert-container"></div>
+
+        <div id="groups-container" class="grid-3">
+            <div class="loading-overlay"><div class="spinner"></div></div>
+        </div>
+    </main>
+</div>
+
+<!-- Create Group Modal -->
+<div class="modal-overlay" id="create-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Create Study Group</h3>
+            <button class="modal-close" onclick="closeModal('create-modal')">✕</button>
+        </div>
+        <div id="modal-alert"></div>
+        <div class="form-group">
+            <label class="form-label">Group Name *</label>
+            <input type="text" id="g-name" class="form-control" placeholder="Java Masters">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Subject *</label>
+            <input type="text" id="g-subject" class="form-control"
+                   placeholder="Java Programming">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Description</label>
+            <textarea id="g-desc" class="form-control" rows="3"
+                      placeholder="What will this group study?"></textarea>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Maximum Members</label>
+            <input type="number" id="g-max" class="form-control"
+                   value="10" min="2" max="50">
+        </div>
+        <div style="display:flex;gap:12px;justify-content:flex-end;">
+            <button class="btn btn-outline" onclick="closeModal('create-modal')">Cancel</button>
+            <button class="btn btn-primary" onclick="createGroup()">Create Group</button>
+        </div>
+    </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/utils.js"></script>
+<script>
+    requireAuth();
+    renderSidebar('groups');
+
+    let currentTab = 'all';
+    let allGroups  = [];
+    let myGroups   = [];
+
+    async function loadGroups() {
+        try {
+            const [all, mine] = await Promise.all([
+                GroupAPI.getAllGroups(),
+                GroupAPI.getMyGroups()
+            ]);
+            allGroups = all || [];
+            myGroups  = mine || [];
+            renderGroups(allGroups);
+        } catch(e) {
+            showAlert('alert-container', 'Failed to load groups');
+        }
+    }
+
+    function switchTab(tab) {
+        currentTab = tab;
+        document.getElementById('tab-all').className =
+            'btn btn-sm ' + (tab === 'all' ? 'btn-primary' : 'btn-outline');
+        document.getElementById('tab-mine').className =
+            'btn btn-sm ' + (tab === 'mine' ? 'btn-primary' : 'btn-outline');
+        renderGroups(tab === 'all' ? allGroups : myGroups);
+    }
+
+    async function handleSearch(keyword) {
+        if (!keyword.trim()) {
+            renderGroups(currentTab === 'all' ? allGroups : myGroups);
+            return;
+        }
+        try {
+            const results = await GroupAPI.searchGroups(keyword);
+            renderGroups(results);
+        } catch(e) { /* silent */ }
+    }
+
+    function isMember(groupId) {
+        return myGroups.some(g => g.id === groupId);
+    }
+
+    function renderGroups(groups) {
+        const el = document.getElementById('groups-container');
+        if (!groups.length) {
+            el.innerHTML = `
+                <div class="empty-state" style="grid-column:1/-1;">
+                    <div class="empty-state-icon">👥</div>
+                    <h3>No groups found</h3>
+                    <p>Be the first to create one!</p>
+                </div>`;
+            return;
+        }
+
+        el.innerHTML = groups.map(g => `
+            <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+                <div>
+                    <div style="display:flex;align-items:flex-start;
+                                justify-content:space-between;margin-bottom:8px;">
+                        <h4>${g.name}</h4>
+                        <span class="badge ${g.isActive ? 'badge-success' : 'badge-gray'}">
+                            ${g.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                    </div>
+                    <span class="badge badge-primary" style="margin-bottom:8px;">${g.subject}</span>
+                    <p style="font-size:0.8rem;color:var(--text-secondary);margin-top:8px;">
+                        ${g.description || 'No description'}
+                    </p>
+                </div>
+                <div style="display:flex;justify-content:space-between;
+                            font-size:0.75rem;color:var(--text-secondary);">
+                    <span>👤 ${g.currentMemberCount}/${g.maxMembers} members</span>
+                    <span>By ${g.createdByName}</span>
+                </div>
+                <div style="display:flex;gap:8px;">
+                    ${isMember(g.id)
+                        ? `<button class="btn btn-outline btn-sm"
+                                   onclick="leaveGroup(${g.id})">Leave</button>`
+                        : `<button class="btn btn-primary btn-sm"
+                                   onclick="joinGroup(${g.id})"
+                                   ${g.currentMemberCount >= g.maxMembers ? 'disabled' : ''}>
+                                ${g.currentMemberCount >= g.maxMembers ? 'Full' : 'Join'}
+                           </button>`}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async function joinGroup(id) {
+        try {
+            await GroupAPI.joinGroup(id);
+            showAlert('alert-container', 'Joined group successfully!', 'success');
+            await loadGroups();
+        } catch(e) {
+            showAlert('alert-container', e.message);
+        }
+    }
+
+    async function leaveGroup(id) {
+        if (!confirm('Leave this group?')) return;
+        try {
+            await GroupAPI.leaveGroup(id);
+            showAlert('alert-container', 'Left group', 'success');
+            await loadGroups();
+        } catch(e) {
+            showAlert('alert-container', e.message);
+        }
+    }
+
+    async function createGroup() {
+        const name    = document.getElementById('g-name').value.trim();
+        const subject = document.getElementById('g-subject').value.trim();
+        const desc    = document.getElementById('g-desc').value.trim();
+        const max     = parseInt(document.getElementById('g-max').value);
+
+        if (!name || !subject) {
+            showAlert('modal-alert', 'Name and subject are required');
+            return;
+        }
+
+        try {
+            await GroupAPI.createGroup({ name, subject, description: desc, maxMembers: max });
+            closeModal('create-modal');
+            showAlert('alert-container', 'Group created!', 'success');
+            await loadGroups();
+        } catch(e) {
+            showAlert('modal-alert', e.message);
+        }
+    }
+
+    loadGroups();
+</script>
+</body>
+</html>
