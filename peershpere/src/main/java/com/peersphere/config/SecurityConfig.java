@@ -98,7 +98,6 @@ public class SecurityConfig {
 
         UrlBasedCorsConfigurationSource source =
                 new UrlBasedCorsConfigurationSource();
->>>>>>> d728fb1 (updated CROS)
 
         source.registerCorsConfiguration("/**", configuration);
 
