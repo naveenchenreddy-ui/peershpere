@@ -61,7 +61,7 @@ public class SecurityConfig {
                 "http://127.0.0.1:5500",
                 "http://localhost:3000",
                 "http://localhost:63342"
-                "https://YOUR-PEERSPHERE-DOMAIN.up.railway.app"
+                ""https://peersphere-production.up.railway.app""
         ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
