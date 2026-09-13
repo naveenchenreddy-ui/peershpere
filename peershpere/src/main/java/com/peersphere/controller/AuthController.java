@@ -1,14 +1,19 @@
 package com.peersphere.controller;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.peersphere.dto.request.LoginRequest;
 import com.peersphere.dto.request.RegisterRequest;
 import com.peersphere.dto.response.AuthResponse;
 import com.peersphere.service.AuthService;
+
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 
 /**
  * @RestController — combines @Controller + @ResponseBody.
@@ -26,7 +31,6 @@ import org.springframework.web.bind.annotation.*;
  * status code, headers, and body. Clean and explicit.
  */
 @RestController
-@CrossOrigin(origins = "http://localhost:63342")
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 public class AuthController {
