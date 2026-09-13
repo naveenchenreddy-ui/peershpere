@@ -1,7 +1,7 @@
 package com.peersphere.config;
 
-import java.util.List;
-
+import com.peersphere.security.JwtAuthenticationFilter;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationProvider;
@@ -15,9 +15,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import com.peersphere.security.JwtAuthenticationFilter;
-
-import lombok.RequiredArgsConstructor;
+import java.util.List;
 
 @Configuration
 @EnableWebSecurity
@@ -31,41 +29,32 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
         http
-                // Disable CSRF because this application uses JWT authentication
                 .csrf(AbstractHttpConfigurer::disable)
 
-                // Enable CORS
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .cors(cors -> cors
+                        .configurationSource(corsConfigurationSource())
+                )
 
-                // Authorization rules
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/",
-                                "/index.html",
                                 "/*.html",
                                 "/css/**",
                                 "/js/**",
                                 "/images/**",
                                 "/favicon.ico",
-
-                                // Authentication endpoints
                                 "/api/auth/**",
-
-                                // Public API endpoints
                                 "/api/public/**"
                         ).permitAll()
-
                         .anyRequest().authenticated()
                 )
 
-                // JWT = stateless authentication
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
 
                 .authenticationProvider(authenticationProvider)
 
-                // JWT filter runs before username/password authentication
                 .addFilterBefore(
                         jwtAuthFilter,
                         UsernamePasswordAuthenticationFilter.class
@@ -74,37 +63,19 @@ public class SecurityConfig {
         return http.build();
     }
 
-
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
 
         CorsConfiguration configuration = new CorsConfiguration();
 
-        /*
-         * Local development
-         */
         configuration.setAllowedOrigins(List.of(
                 "http://localhost:5500",
                 "http://127.0.0.1:5500",
                 "http://localhost:3000",
                 "http://localhost:63342",
-<<<<<<< HEAD
-                "https://peersphere-production.up.railway.app"
-        ));
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true);
-=======
-
-                /*
-                 * Railway production frontend
-                 */
                 "https://peersphere-production.up.railway.app"
         ));
 
-        /*
-         * HTTP methods allowed by the API
-         */
         configuration.setAllowedMethods(List.of(
                 "GET",
                 "POST",
@@ -114,9 +85,6 @@ public class SecurityConfig {
                 "OPTIONS"
         ));
 
-        /*
-         * Headers allowed
-         */
         configuration.setAllowedHeaders(List.of(
                 "Authorization",
                 "Content-Type",
@@ -125,10 +93,7 @@ public class SecurityConfig {
                 "X-Requested-With"
         ));
 
-        /*
-         * JWT is sent through Authorization header.
-         * We do not need browser cookies.
-         */
+        // You are using JWT Authorization headers, not cookies.
         configuration.setAllowCredentials(false);
 
         UrlBasedCorsConfigurationSource source =
