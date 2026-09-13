@@ -2,7 +2,7 @@
 // Central place for all backend API calls
 // Every function returns the parsed JSON response or throws an error
 
-const BASE_URL = 'http://localhost:8081/api';
+const BASE_URL = '/api';
 
 /**
  * Core fetch wrapper.
