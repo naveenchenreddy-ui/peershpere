@@ -73,6 +73,9 @@ public class SecurityConfig {
                 "http://127.0.0.1:5500",
                 "http://localhost:3000",
                 "http://localhost:63342",
+                "http://localhost:8081",
+                "http://127.0.0.1:8081",
+                "https://peershpere-production.up.railway.app",
                 "https://peersphere-production.up.railway.app"
         ));
 
@@ -90,7 +93,9 @@ public class SecurityConfig {
                 "Content-Type",
                 "Accept",
                 "Origin",
-                "X-Requested-With"
+                "X-Requested-With",
+                "Cache-Control",
+                "Pragma"
         ));
 
         // You are using JWT Authorization headers, not cookies.
