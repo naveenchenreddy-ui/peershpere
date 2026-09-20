@@ -1,0 +1,11 @@
+{
+  "name": "peershpere-frontend",
+  "version": "1.0.0",
+  "description": "PeerSphere static frontend — deployed separately from the backend",
+  "scripts": {
+    "start": "serve -s . -l $PORT"
+  },
+  "dependencies": {
+    "serve": "^14.2.4"
+  }
+}
